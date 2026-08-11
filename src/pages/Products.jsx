@@ -122,9 +122,9 @@ export default function Products() {
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>नाम (मराठी)</th>
+                    <th translate="no">नाम (मराठी)</th>
                     <th>English</th>
-                    <th>Unit</th>
+                    <th translate="no">Unit</th>
                     <th>रेट (₹)</th>
                     <th>Status</th>
                     <th>Action</th>
@@ -134,9 +134,9 @@ export default function Products() {
                   {filtered.map(prod => (
                     <tr key={prod.id} style={{ opacity: prod.active ? 1 : 0.4 }}>
                       <td><span style={{ fontWeight:800, color:'var(--green)', fontSize:16 }}>{prod.item_no}</span></td>
-                      <td style={{ fontFamily:"'Noto Sans Devanagari',sans-serif", fontWeight:700, fontSize:15 }}>{prod.name_hindi}</td>
+                      <td translate="no" style={{ fontFamily:"'Noto Sans Devanagari',sans-serif", fontWeight:700, fontSize:15 }}>{prod.name_hindi}</td>
                       <td style={{ color:'var(--text-secondary)' }}>{prod.name}</td>
-                      <td><span className={`badge ${unitBadgeColor(prod.unit)}`}>{prod.unit}</span></td>
+                      <td><span translate="no" className={`badge ${unitBadgeColor(prod.unit)}`}>{prod.unit}</span></td>
                       <td>
                         <span style={{ fontWeight:700, color: prod.price > 0 ? 'var(--orange)' : 'var(--text-muted)', fontSize:15 }}>
                           {prod.price > 0 ? `₹${prod.price}` : 'Set करो →'}
