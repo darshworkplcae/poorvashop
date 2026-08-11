@@ -2,35 +2,28 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { saveBill, getProducts, getNextBillNo } from '../lib/api';
 import { useApp } from '../context/AppContext';
 
-// Map item numbers to product names from DB (cached)
-let productCache = {};
-
 const CATS = ['All', 'Vegetables', 'Fruits', 'Herbs', 'Other'];
 
 export default function Billing() {
   const { scaleConnected, scaleData, printBill, addToast } = useApp();
 
-  // Products
   const [products, setProducts]   = useState([]);
   const [filtered, setFiltered]   = useState([]);
   const [search, setSearch]       = useState('');
   const [category, setCategory]   = useState('All');
 
-  // Current bill
   const [billItems, setBillItems] = useState([]);
   const [billNo, setBillNo]       = useState('...');
 
-  // Weight modal
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [weightInput, setWeightInput]         = useState('');
+  const [countInput, setCountInput]           = useState('');  // for pendi/piece
   const weightRef = useRef(null);
 
-  // Live scale display (from WebSocket)
   const [liveWeight, setLiveWeight] = useState(null);
   const [liveItem, setLiveItem]     = useState(null);
 
-  // Print preview
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [lastBill, setLastBill]                 = useState(null);
 
@@ -47,9 +40,9 @@ export default function Billing() {
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.nameHindi.includes(q) ||
-        String(p.itemNo).includes(q)
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.name_hindi || '').includes(q) ||
+        String(p.item_no).includes(q)
       );
     }
     setFiltered(list);
@@ -59,117 +52,123 @@ export default function Billing() {
   useEffect(() => {
     if (!scaleData) return;
 
-    // ── CASE A: Complete bill received (scale PRINT pressed) ───────────────
     if (scaleData.type === 'SCALE_BILL') {
       const { items, total } = scaleData;
       if (!items || items.length === 0) return;
 
-      // Map item numbers to Hindi names from our product DB
-      const billItems = items.map(it => {
-        const prod = products.find(p => p.itemNo === it.itemNo);
+      const newBillItems = items.map(it => {
+        const prod = products.find(p => p.item_no === it.itemNo);
         return {
           id:         Date.now() + Math.random(),
           itemNo:     it.itemNo,
-          itemName:   prod ? prod.nameHindi : `Item #${it.itemNo}`,
-          itemNameEn: prod ? prod.name      : `Item ${it.itemNo}`,
+          itemName:   prod ? prod.name_hindi : `Item #${it.itemNo}`,
+          itemNameEn: prod ? prod.name       : `Item ${it.itemNo}`,
           weight:     it.weight,
           pricePerKg: it.rate,
+          unit:       prod?.unit || 'kg',
           amount:     it.amount,
         };
       });
 
-      // Auto-save the complete bill
-      saveBill(billItems, total).then(({ billNo }) => {
+      saveBill(newBillItems, total).then(({ billNo: savedNo }) => {
         setBillNo(prev => prev + 1);
-        addToast(`🖨️ Bill #${billNo} auto-saved! ₹${total}`, 'success');
-        // Flash the items briefly on screen
-        setBillItems(billItems);
+        addToast(`🖨️ Bill #${savedNo} auto-saved! ₹${total}`, 'success');
+        setBillItems(newBillItems);
         setTimeout(() => setBillItems([]), 4000);
       });
       return;
     }
 
-    // ── CASE B: Live weight reading (individual item on scale) ─────────────
     const { itemNo, weight } = scaleData;
     if (!itemNo) return;
 
-    const prod = products.find(p => p.itemNo === itemNo);
-    if (!prod) {
-      addToast(`⚠️ Item #${itemNo} नहीं मिला`, 'error');
-      return;
-    }
+    const prod = products.find(p => p.item_no === itemNo);
+    if (!prod) { addToast(`⚠️ Item #${itemNo} नहीं मिला`, 'error'); return; }
 
     setLiveItem(prod);
     setLiveWeight(weight);
 
-    // If weight > 0, add to current manual bill
     if (weight > 0) {
       const amount = parseFloat((weight * prod.price).toFixed(2));
       addItemToBill({
-        itemNo:     prod.itemNo,
-        itemName:   prod.nameHindi,
+        itemNo:     prod.item_no,
+        itemName:   prod.name_hindi,
         itemNameEn: prod.name,
         weight,
         pricePerKg: prod.price,
+        unit:       prod.unit,
         amount,
       });
-      addToast(`✅ ${prod.nameHindi} ${weight}kg — ₹${amount}`, 'success');
+      addToast(`✅ ${prod.name_hindi} ${weight}${prod.unit} — ₹${amount}`, 'success');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scaleData]);
 
-  // ── Add item to bill ──────────────────────────────────────────────────────
   const addItemToBill = useCallback((item) => {
     setBillItems(prev => [...prev, { ...item, id: Date.now() }]);
   }, []);
 
-  // ── Click a product button (manual mode) ──────────────────────────────────
   function handleProductClick(prod) {
     if (scaleConnected) {
-      // Scale is connected — just show which item is selected, weight comes from scale
-      addToast(`⚖️ ${prod.nameHindi} चुना — तराजू पर रखें`, 'info');
+      addToast(`⚖️ ${prod.name_hindi} चुना — तराजू पर रखें`, 'info');
       setLiveItem(prod);
       return;
     }
-    // Manual mode
     setSelectedProduct(prod);
     setWeightInput('');
+    setCountInput('1');
     setShowWeightModal(true);
     setTimeout(() => weightRef.current?.focus(), 100);
   }
 
-  // ── Confirm manual weight ──────────────────────────────────────────────────
+  const isCountUnit = (unit) => unit === 'पेंडी' || unit === 'piece' || unit === 'dozen';
+
   function confirmWeight() {
-    const w = parseFloat(weightInput);
-    if (!w || w <= 0) { addToast('⚠️ सही वजन डालो', 'error'); return; }
-    const amount = parseFloat((w * selectedProduct.price).toFixed(2));
-    addItemToBill({
-      itemNo:      selectedProduct.itemNo,
-      itemName:    selectedProduct.nameHindi,
-      itemNameEn:  selectedProduct.name,
-      weight:      w,
-      pricePerKg:  selectedProduct.price,
-      amount,
-    });
-    setShowWeightModal(false);
-    addToast(`✅ ${selectedProduct.nameHindi} ${w}kg — ₹${amount}`, 'success');
+    if (isCountUnit(selectedProduct.unit)) {
+      // Pendi / piece — use count
+      const count = parseFloat(countInput);
+      if (!count || count <= 0) { addToast('⚠️ सही संख्या डालो', 'error'); return; }
+      const amount = parseFloat((count * selectedProduct.price).toFixed(2));
+      addItemToBill({
+        itemNo:      selectedProduct.item_no,
+        itemName:    selectedProduct.name_hindi,
+        itemNameEn:  selectedProduct.name,
+        weight:      count,       // using weight field to store count
+        pricePerKg:  selectedProduct.price,
+        unit:        selectedProduct.unit,
+        amount,
+      });
+      setShowWeightModal(false);
+      addToast(`✅ ${selectedProduct.name_hindi} ×${count} — ₹${amount}`, 'success');
+    } else {
+      // kg — use weight
+      const w = parseFloat(weightInput);
+      if (!w || w <= 0) { addToast('⚠️ सही वजन डालो', 'error'); return; }
+      const amount = parseFloat((w * selectedProduct.price).toFixed(2));
+      addItemToBill({
+        itemNo:      selectedProduct.item_no,
+        itemName:    selectedProduct.name_hindi,
+        itemNameEn:  selectedProduct.name,
+        weight:      w,
+        pricePerKg:  selectedProduct.price,
+        unit:        selectedProduct.unit,
+        amount,
+      });
+      setShowWeightModal(false);
+      addToast(`✅ ${selectedProduct.name_hindi} ${w}kg — ₹${amount}`, 'success');
+    }
   }
 
-  // ── Remove item from bill ─────────────────────────────────────────────────
-  function removeItem(id) {
-    setBillItems(prev => prev.filter(it => it.id !== id));
-  }
+  function removeItem(id) { setBillItems(prev => prev.filter(it => it.id !== id)); }
 
-  // ── Total ─────────────────────────────────────────────────────────────────
   const total = billItems.reduce((s, it) => s + it.amount, 0);
 
-  // ── Print bill ────────────────────────────────────────────────────────────
   async function handlePrint() {
     if (billItems.length === 0) { addToast('⚠️ बिल खाली है!', 'error'); return; }
     try {
       const { billNo: newBillNo } = await saveBill(billItems, total);
       const billData = { billNo: newBillNo, items: billItems, total, date: new Date() };
-      printBill(billData); // Send to bridge for thermal printer
+      printBill(billData);
       setLastBill(billData);
       setShowPrintPreview(true);
       setBillNo(prev => prev + 1);
@@ -182,7 +181,6 @@ export default function Billing() {
     }
   }
 
-  // ── Clear bill ────────────────────────────────────────────────────────────
   function clearBill() {
     if (billItems.length === 0) return;
     if (window.confirm('बिल साफ करें?')) {
@@ -194,6 +192,12 @@ export default function Billing() {
 
   const fmt = (n) => `₹${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const unitIcon = (unit) => {
+    if (unit === 'पेंडी') return '🌿';
+    if (unit === 'piece') return '🔢';
+    return '⚖️';
+  };
+
   return (
     <>
       <div className="page-header">
@@ -204,7 +208,7 @@ export default function Billing() {
       </div>
 
       <div className="page-body" style={{ paddingTop: 12 }}>
-        {/* ── Scale Status Bar ── */}
+        {/* Scale Status Bar */}
         <div className="scale-status-bar" style={{ borderRadius: 'var(--radius-lg)', marginBottom: 12, border: '1px solid var(--border)' }}>
           <div style={{
             display:'flex', alignItems:'center', gap:8,
@@ -223,14 +227,14 @@ export default function Billing() {
             <div className="scale-reading-item">
               <div className="scale-reading-label">Item No.</div>
               <div className={`scale-reading-value${liveItem ? '' : ' dim'}`}>
-                {liveItem ? `#${liveItem.itemNo}` : '--'}
+                {liveItem ? `#${liveItem.item_no}` : '--'}
               </div>
             </div>
             <div className="scale-reading-item">
               <div className="scale-reading-label">सामान</div>
               <div className={`scale-reading-value${liveItem ? '' : ' dim'}`}
                 style={{ fontSize:16, fontFamily:"'Noto Sans Devanagari',sans-serif" }}>
-                {liveItem ? liveItem.nameHindi : '------'}
+                {liveItem ? liveItem.name_hindi : '------'}
               </div>
             </div>
             <div className="scale-reading-item">
@@ -260,14 +264,14 @@ export default function Billing() {
           )}
         </div>
 
-        {/* ── Main Billing Layout ── */}
+        {/* Main Billing Layout */}
         <div className="billing-layout">
           {/* LEFT — Product Grid */}
           <div className="product-grid-wrap">
             <div className="product-grid-header">
               <input
                 className="product-search"
-                placeholder="🔍 नाम या नंबर से खोजो... (Search)"
+                placeholder="🔍 नाम या नंबर से खोजो..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -289,10 +293,19 @@ export default function Billing() {
                   onClick={() => handleProductClick(prod)}
                   title={`${prod.name} — ₹${prod.price}/${prod.unit}`}
                 >
-                  <div className="product-btn-num">#{prod.itemNo}</div>
-                  <div className="product-btn-name-hi">{prod.nameHindi}</div>
+                  <div className="product-btn-num">#{prod.item_no}</div>
+                  <div className="product-btn-name-hi"
+                    style={{ fontFamily:"'Noto Sans Devanagari',sans-serif" }}>
+                    {prod.name_hindi}
+                  </div>
                   <div className="product-btn-name">{prod.name}</div>
-                  <div className="product-btn-price">₹{prod.price}/{prod.unit}</div>
+                  <div className="product-btn-price">
+                    {prod.price > 0 ? `₹${prod.price}` : 'Set→'}
+                    <span style={{ opacity:0.7, fontSize:9 }}>/{prod.unit}</span>
+                    {isCountUnit(prod.unit) && (
+                      <span style={{ marginLeft:2 }}>{unitIcon(prod.unit)}</span>
+                    )}
+                  </div>
                 </button>
               ))}
               {filtered.length === 0 && (
@@ -312,10 +325,9 @@ export default function Billing() {
                   {new Date().toLocaleTimeString('hi-IN', { hour:'2-digit', minute:'2-digit' })}
                 </div>
               </div>
-              <span className="badge badge-orange">{billItems.length} item{billItems.length !== 1 ? 's' : ''}</span>
+              <span className="badge badge-orange">{billItems.length} ITEMS</span>
             </div>
 
-            {/* Bill Items */}
             <div className="bill-items-list">
               {billItems.length === 0 ? (
                 <div className="empty-state">
@@ -329,10 +341,13 @@ export default function Billing() {
                     <div>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                         <span style={{ fontSize:11, color:'var(--text-muted)', fontWeight:700 }}>#{i+1}</span>
-                        <div className="bill-item-name">{item.itemName}</div>
+                        <div className="bill-item-name"
+                          style={{ fontFamily:"'Noto Sans Devanagari',sans-serif" }}>
+                          {item.itemName}
+                        </div>
                       </div>
                       <div className="bill-item-detail">
-                        {item.weight} kg × ₹{item.pricePerKg}/kg
+                        {item.weight} {item.unit || 'kg'} × ₹{item.pricePerKg}/{item.unit || 'kg'}
                       </div>
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
@@ -344,17 +359,12 @@ export default function Billing() {
               )}
             </div>
 
-            {/* Total + Actions */}
             <div className="bill-panel-total">
               {billItems.length > 0 && (
                 <>
                   <div className="total-row">
                     <span>कुल सामान</span>
                     <span>{billItems.length} items</span>
-                  </div>
-                  <div className="total-row">
-                    <span>कुल वजन</span>
-                    <span>{billItems.reduce((s,i)=>s+(i.weight||0),0).toFixed(2)} kg</span>
                   </div>
                 </>
               )}
@@ -375,33 +385,65 @@ export default function Billing() {
         </div>
       </div>
 
-      {/* ── Manual Weight Modal ── */}
+      {/* Manual Weight/Count Modal */}
       {showWeightModal && selectedProduct && (
         <div className="modal-overlay" onClick={() => setShowWeightModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-title">
-              ⚖️ वजन डालो
-              <div style={{ fontSize:14, color:'var(--text-secondary)', fontWeight:400, marginTop:4,
+              {isCountUnit(selectedProduct.unit) ? `${unitIcon(selectedProduct.unit)} संख्या डालो` : '⚖️ वजन डालो'}
+              <div style={{ fontSize:14, color:'var(--text-secondary)', fontWeight:500, marginTop:6,
                 fontFamily:"'Noto Sans Devanagari',sans-serif" }}>
-                #{selectedProduct.itemNo} &nbsp;{selectedProduct.nameHindi} &nbsp;—&nbsp; ₹{selectedProduct.price}/{selectedProduct.unit}
+                #{selectedProduct.item_no} &nbsp;
+                <strong>{selectedProduct.name_hindi}</strong>
+                &nbsp;—&nbsp; ₹{selectedProduct.price}/{selectedProduct.unit}
               </div>
             </div>
-            <input
-              ref={weightRef}
-              type="number"
-              step="0.05"
-              min="0"
-              className="weight-input-big"
-              placeholder="0.00"
-              value={weightInput}
-              onChange={e => setWeightInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') confirmWeight(); if (e.key === 'Escape') setShowWeightModal(false); }}
-            />
-            <div style={{ fontSize:18, color:'var(--orange)', fontWeight:800, textAlign:'center', marginTop:12 }}>
-              {weightInput > 0
-                ? `₹${(parseFloat(weightInput) * selectedProduct.price).toFixed(2)}`
-                : '₹ --'}
-            </div>
+
+            {isCountUnit(selectedProduct.unit) ? (
+              // Pendi / piece: enter count
+              <div>
+                <div style={{ textAlign:'center', fontSize:13, color:'var(--text-secondary)', marginBottom:8 }}>
+                  कितने {selectedProduct.unit}?
+                </div>
+                <input
+                  ref={weightRef}
+                  type="number"
+                  min="1"
+                  step="1"
+                  className="weight-input-big"
+                  placeholder="1"
+                  value={countInput}
+                  onChange={e => setCountInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') confirmWeight(); if (e.key === 'Escape') setShowWeightModal(false); }}
+                />
+                <div style={{ fontSize:18, color:'var(--orange)', fontWeight:800, textAlign:'center', marginTop:12 }}>
+                  {countInput > 0
+                    ? `${countInput} × ₹${selectedProduct.price} = ₹${(parseFloat(countInput) * selectedProduct.price).toFixed(2)}`
+                    : '₹ --'}
+                </div>
+              </div>
+            ) : (
+              // kg: enter weight
+              <div>
+                <input
+                  ref={weightRef}
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  className="weight-input-big"
+                  placeholder="0.00 kg"
+                  value={weightInput}
+                  onChange={e => setWeightInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') confirmWeight(); if (e.key === 'Escape') setShowWeightModal(false); }}
+                />
+                <div style={{ fontSize:18, color:'var(--orange)', fontWeight:800, textAlign:'center', marginTop:12 }}>
+                  {weightInput > 0
+                    ? `${weightInput} kg × ₹${selectedProduct.price} = ₹${(parseFloat(weightInput) * selectedProduct.price).toFixed(2)}`
+                    : '₹ --'}
+                </div>
+              </div>
+            )}
+
             <div className="modal-actions">
               <button className="btn btn-ghost" style={{ flex:1 }} onClick={() => setShowWeightModal(false)}>रद्द करो</button>
               <button className="btn btn-primary" style={{ flex:2 }} onClick={confirmWeight}>✅ जोड़ो</button>
@@ -410,14 +452,14 @@ export default function Billing() {
         </div>
       )}
 
-      {/* ── Print Preview Modal ── */}
+      {/* Print Preview Modal */}
       {showPrintPreview && lastBill && (
         <div className="modal-overlay" onClick={() => setShowPrintPreview(false)}>
           <div className="modal" style={{ maxWidth:360 }} onClick={e => e.stopPropagation()}>
             <div className="modal-title">🖨️ Bill #{lastBill.billNo}</div>
             <div className="print-preview">
               <div style={{ textAlign:'center', marginBottom:8 }}>
-                <strong style={{ fontSize:16 }}>OM SHOP</strong><br/>
+                <strong style={{ fontSize:16 }}>POORVA SHOP</strong><br/>
                 <span style={{ fontSize:11 }}>सब्जी और फल दुकान</span><br/>
                 <span style={{ fontSize:10 }}>----------------------------</span>
               </div>
@@ -426,9 +468,11 @@ export default function Billing() {
                 <div>Date: {new Date(lastBill.date).toLocaleString('en-IN')}</div>
               </div>
               <hr/>
-              {lastBill.items.map((it,i) => (
+              {lastBill.items.map((it, i) => (
                 <div key={i} style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'2px 0' }}>
-                  <span>{it.itemName} {it.weight}kg</span>
+                  <span style={{ fontFamily:"'Noto Sans Devanagari',sans-serif" }}>
+                    {it.itemName} {it.weight}{it.unit || 'kg'}
+                  </span>
                   <span>₹{it.amount.toFixed(2)}</span>
                 </div>
               ))}
@@ -438,7 +482,7 @@ export default function Billing() {
                 <span>₹{lastBill.total.toFixed(2)}</span>
               </div>
               <div style={{ textAlign:'center', marginTop:8, fontSize:10 }}>
-                ध न्यवाद! आते रहिए 🙏
+                धन्यवाद! आते रहिए 🙏
               </div>
             </div>
             <div className="modal-actions">
