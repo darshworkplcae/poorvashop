@@ -1,0 +1,5 @@
+node_modules/
+bridge/node_modules/
+dist/
+.env
+*.log

@@ -1,0 +1,12 @@
+{
+  "comPort": "COM3",
+  "baudRate": 9600,
+  "dataBits": 8,
+  "parity": "none",
+  "stopBits": 1,
+  "wsPort": 3001,
+  "logRawData": true,
+  "shopName": "POORVA SHOP",
+  "supabaseUrl": "https://epssztufyxaltlftrrep.supabase.co",
+  "supabaseKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwc3N6dHVmeXhhbHRsZnRycmVwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjQ0NzkxMCwiZXhwIjoyMTAyMDIzOTEwfQ.qDqbGHKryenzMfdLS1s__Q9nXyyAPZIpscaEcvdMT-0"
+}

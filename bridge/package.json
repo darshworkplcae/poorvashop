@@ -1,0 +1,14 @@
+{
+  "name": "om-shop-bridge",
+  "version": "1.0.0",
+  "description": "OM SHOP Scale Bridge - reads Sharp RKS-35 RS232 data and sends to web app",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js",
+    "list-ports": "node -e \"const {SerialPort}=require('serialport');SerialPort.list().then(p=>p.forEach(x=>console.log(x.path,x.manufacturer||'')))\""
+  },
+  "dependencies": {
+    "serialport": "^12.0.0",
+    "ws": "^8.18.0"
+  }
+}
