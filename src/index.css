@@ -658,7 +658,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 10px;
   padding: 16px;
   overflow-y: auto;
@@ -669,17 +669,19 @@ tbody tr:last-child td { border-bottom: none; }
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 8px;
+  padding: 14px 10px 10px;
   cursor: pointer;
   transition: var(--transition);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   font-family: inherit;
   position: relative;
   overflow: hidden;
+  min-height: 80px;
+  justify-content: center;
 }
 
 .product-btn::before {
@@ -705,31 +707,44 @@ tbody tr:last-child td { border-bottom: none; }
   cursor: not-allowed;
 }
 
+/* Item number — tiny, top-right corner */
 .product-btn-num {
-  font-size: 18px; font-weight: 800;
-  color: var(--green);
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
   line-height: 1;
 }
 
+/* English name — small, below Marathi */
 .product-btn-name {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-secondary);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
+/* Marathi name — BIG, main text */
 .product-btn-name-hi {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: 800;
   font-family: 'Noto Sans Devanagari', sans-serif;
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .product-btn-price {
   font-size: 11px;
   color: var(--orange);
   font-weight: 700;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 /* ===== BILL PANEL ===== */
