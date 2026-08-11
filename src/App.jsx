@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider }  from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout      from './components/Layout';
@@ -12,52 +12,20 @@ import FarmerStock from './pages/FarmerStock';
 import Settings    from './pages/Settings';
 import Admin       from './pages/Admin';
 
-// Redirects to /login if not authenticated
-function ProtectedRoute({ children }) {
+// Wraps Layout + auth check — renders Outlet (child routes) inside
+function ProtectedLayout() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  return children;
+  return <Layout />;
 }
 
-// Admin-only route guard
-function AdminRoute({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+// Admin-only guard
+function AdminGuard() {
+  const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'admin') return <Navigate to="/" replace />;
-  return children;
-}
-
-function AppRoutes() {
-  const { user } = useAuth();
-
-  return (
-    <Routes>
-      {/* Public */}
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
-
-      {/* Protected */}
-      <Route path="/" element={
-        <ProtectedRoute>
-          <Layout>
-            <Routes>
-              <Route path="/"         element={<Dashboard />} />
-              <Route path="/billing"  element={<Billing />} />
-              <Route path="/history"  element={<BillHistory />} />
-              <Route path="/reports"  element={<Reports />} />
-              <Route path="/products" element={<Products />} />
-              <Route path="/stock"    element={<FarmerStock />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/admin"    element={
-                <AdminRoute><Admin /></AdminRoute>
-              } />
-            </Routes>
-          </Layout>
-        </ProtectedRoute>
-      } />
-    </Routes>
-  );
+  return <Outlet />;
 }
 
 export default function App() {
@@ -65,9 +33,38 @@ export default function App() {
     <AuthProvider>
       <AppProvider>
         <BrowserRouter>
-          <AppRoutes />
+          <Routes>
+            {/* Public route */}
+            <Route path="/login" element={<LoginRedirect />} />
+
+            {/* Protected layout — all pages inside Layout */}
+            <Route element={<ProtectedLayout />}>
+              <Route path="/"         element={<Dashboard />} />
+              <Route path="/billing"  element={<Billing />} />
+              <Route path="/history"  element={<BillHistory />} />
+              <Route path="/reports"  element={<Reports />} />
+              <Route path="/products" element={<Products />} />
+              <Route path="/stock"    element={<FarmerStock />} />
+              <Route path="/settings" element={<Settings />} />
+
+              {/* Admin-only */}
+              <Route element={<AdminGuard />}>
+                <Route path="/admin" element={<Admin />} />
+              </Route>
+            </Route>
+
+            {/* Catch-all */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </BrowserRouter>
       </AppProvider>
     </AuthProvider>
   );
+}
+
+// Redirect to / if already logged in
+function LoginRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  return user ? <Navigate to="/" replace /> : <Login />;
 }

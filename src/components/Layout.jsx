@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import { useApp }  from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -35,7 +35,7 @@ function NavItem({ item, onClose }) {
   );
 }
 
-export default function Layout({ children }) {
+export default function Layout() {
   const { scaleConnected, toasts } = useApp();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -144,7 +144,7 @@ export default function Layout({ children }) {
 
       {/* ── Main Content ── */}
       <main className="main-content">
-        {children}
+        <Outlet />
       </main>
 
       {/* ── Toast Notifications ── */}
