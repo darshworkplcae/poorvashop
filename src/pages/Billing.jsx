@@ -70,12 +70,17 @@ export default function Billing() {
         };
       });
 
-      saveBill(newBillItems, total).then(({ billNo: savedNo }) => {
-        setBillNo(prev => prev + 1);
-        addToast(`🖨️ Bill #${savedNo} auto-saved! ₹${total}`, 'success');
-        setBillItems(newBillItems);
-        setTimeout(() => setBillItems([]), 4000);
-      });
+      saveBill(newBillItems, total)
+        .then(({ billNo: savedNo }) => {
+          setBillNo(prev => prev + 1);
+          addToast(`🖨️ Bill #${savedNo} auto-saved! ₹${total}`, 'success');
+          setBillItems(newBillItems);
+          setTimeout(() => setBillItems([]), 4000);
+        })
+        .catch(err => {
+          console.error('Auto-save bill error:', err);
+          addToast(`❌ Bill save failed: ${err?.message || err}`, 'error');
+        });
       return;
     }
 
