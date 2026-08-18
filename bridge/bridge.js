@@ -157,11 +157,20 @@ async function saveBillToCloud(parsedBill) {
 // ── WebSocket (for local web app if running simultaneously) ──────────────────
 const wss = new WebSocketServer({ port: cfg.wsPort });
 const clients = new Set();
+let portOpen = false; // track real port status
 
 wss.on('connection', (ws) => {
   clients.add(ws);
   log(`🌐 Web app connected locally (${clients.size} clients)`);
-  ws.send(JSON.stringify({ type: 'BRIDGE_HELLO' }));
+
+  // Immediately tell new client the current port status (fixes race condition)
+  try {
+    ws.send(JSON.stringify({
+      type: portOpen ? 'SCALE_CONNECTED' : 'SCALE_DISCONNECTED',
+      port: cfg.comPort,
+    }));
+  } catch (_) {}
+
   ws.on('close', () => clients.delete(ws));
   ws.on('error', () => clients.delete(ws));
 });
@@ -288,6 +297,7 @@ function openSerialPort() {
   const parser = port.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
   port.on('open', () => {
+    portOpen = true;
     log(`✅ Port ${cfg.comPort} opened! Waiting for scale data...`);
     broadcast({ type: 'SCALE_CONNECTED', port: cfg.comPort });
   });
@@ -301,12 +311,14 @@ function openSerialPort() {
   });
 
   port.on('error', (err) => {
+    portOpen = false;
     log(`❌ Port error: ${err.message}`);
     broadcast({ type: 'SCALE_DISCONNECTED' });
     setTimeout(openSerialPort, 5000);
   });
 
   port.on('close', () => {
+    portOpen = false;
     log('⚠️  Port closed — reconnecting in 5s...');
     broadcast({ type: 'SCALE_DISCONNECTED' });
     setTimeout(openSerialPort, 5000);
