@@ -16,23 +16,31 @@ export function AppProvider({ children }) {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        setScaleConnected(true);
-        addToast('⚖️ तराजू जुड़ गया! Scale connected!', 'success');
+        // Don't set scaleConnected=true here — wait for SCALE_CONNECTED msg from bridge
+        // (Bridge confirms COM port is actually open)
         if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       };
 
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          // Complete bill from scale PRINT button
+
+          // ── Physical port status from bridge ──
+          if (msg.type === 'SCALE_CONNECTED') {
+            setScaleConnected(true);
+            addToast('⚖️ तराजू जुड़ गया! Scale connected!', 'success');
+          }
+          if (msg.type === 'SCALE_DISCONNECTED') {
+            setScaleConnected(false);
+          }
+
+          // ── Data messages ──
           if (msg.type === 'SCALE_BILL') {
             setScaleData({ type: 'SCALE_BILL', items: msg.items, total: msg.total, ts: Date.now() });
           }
-          // Individual weight reading
           if (msg.type === 'SCALE_DATA') {
             setScaleData({ type: 'SCALE_DATA', itemNo: msg.itemNo, weight: msg.weight, price: msg.price, ts: Date.now() });
           }
-          // Live weight only (no item)
           if (msg.type === 'SCALE_WEIGHT') {
             setScaleData({ type: 'SCALE_WEIGHT', weight: msg.weight, ts: Date.now() });
           }

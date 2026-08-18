@@ -132,10 +132,10 @@ export default function Layout() {
             <div className={`connection-dot${scaleConnected ? ' connected' : ''}`} />
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: scaleConnected ? 'var(--green)' : 'var(--red)' }}>
-                {scaleConnected ? 'Scale जुड़ा ✓' : 'Scale नहीं जुड़ा'}
+                {scaleConnected ? '⚖️ Scale जुड़ा ✓' : '⚖️ Scale नहीं जुड़ा'}
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
-                {scaleConnected ? 'Auto-read ON' : 'Connecting...'}
+                {scaleConnected ? 'Auto-read ON • COM3' : 'Bridge चलाओ → START.bat'}
               </div>
             </div>
           </div>
